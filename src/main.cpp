@@ -3,22 +3,25 @@
 #include <ESP8266WiFi.h>
 #include <ESPAsyncWebServer.h>
 #include <ESPAsyncTCP.h>
+#include <ArduinoJson.h>
 
 #define RELAY_PIN 16
 #define READY_PIN 2
 
 AsyncWebServer server(80);
 Adafruit_ADS1115 ads;
+DynamicJsonDocument doc(4096);
+DynamicJsonDocument doc2(4096);
 
-double milli_amperes = 0;
 const float multiplier = 0.125F;
-
-// #ifndef IRAM_ATTR
-// #define IRAM_ATTR
-// #endif
+const float slope = 1.5007;
+const float intercept = -2.2552;
 
 volatile bool new_data = false;
 volatile unsigned long timestamp;
+
+unsigned int counter = 0;
+
 void IRAM_ATTR NewDataReadyISR()
 {
   new_data = true;
@@ -55,14 +58,13 @@ void initialize_server()
 {
   server.on("/", HTTP_GET, [](AsyncWebServerRequest *request)
             {
-              while(!new_data);
-              
-              new_data = false;
-              float milli_amperes = ((ads.getLastConversionResults() * multiplier) * 1.5007 - 2.2552) / 1000;
-              // Serial.println(milli_amperes);
-              // String return_value = String(((ads.getLastConversionResults() * multiplier) * 1.5007 - 2.2552) / 1000);
+              AsyncResponseStream *response = request->beginResponseStream("application/json");
+              serializeJson(doc2, *response);
+              doc2.clear();
+              doc2.garbageCollect();
+              request->send(response); }
 
-              request->send(200, "text/plain", String(milli_amperes)+","+ String(timestamp)); });
+  );
 
   server.on("/off", HTTP_GET, [](AsyncWebServerRequest *request)
             {
@@ -76,11 +78,6 @@ void initialize_server()
 
   server.begin();
 }
-
-const unsigned int interval = 250;
-unsigned long int previous_millis = 0;
-int signal = LOW;
-int counter = 0;
 
 void setup()
 {
@@ -109,52 +106,25 @@ void setup()
 void loop()
 {
 
-  // const unsigned long currentMillis = millis();
+  if (new_data)
+  {
+    float volts = ads.getLastConversionResults() * multiplier;
+    float amperes = volts * slope + intercept;
+    float milli_amperes = amperes / 1000;
 
-  // if (new_data)
-  // {
-  //   float result = ((ads.getLastConversionResults() * multiplier) * 1.5007 - 2.2552) / 1000;
-  //   counter++;
-  //   new_data = false;
-  //   Serial.println(result);
-  // }
+    JsonArray data = doc[String(counter)].createNestedArray("data");
+    data.add(timestamp);
+    data.add(milli_amperes);
 
-  //
+    new_data = false;
+    counter++;
+  }
 
-  // // int16_t results = ads.readADC_SingleEnded(3);
-  // // milli_amperes = ((results * multiplier) * 1.5007 - 2.2552) / 1000;
-  // // counter++;
-
-  // if (currentMillis - previous_millis >= 1000)
-  // {
-  //   previous_millis = currentMillis;
-  //   Serial.println(counter);
-  //   counter = 0;
-  //   // milli_amperes = results;
-  // }
-
-  // if (currentMillis - previous_millis >= interval)
-  // {
-  //   previous_millis = currentMillis;
-  //   int16_t results = ads.readADC_SingleEnded(3);
-  //   Serial.print(results * multiplier);
-  //   Serial.println(" mV");
-  //   ads.
-
-  // signal = signal == LOW ? HIGH : LOW;
-  // digitalWrite(RELAY_PIN, signal);
-
-  // for (int i = 0; i < 20; i++)
-  // {
-  //   int16_t results = ads.readADC_SingleEnded(3);
-  //   // Serial.print("Differential: ");
-  //   // Serial.print(results);
-  //   // Serial.print("(");
-  //   Serial.print(results * multiplier);
-  //   Serial.println(" mV");
-  // }
-  // int16_t results = ads.readADC_Differential_0_1();
+  if (counter == 30)
+  {
+    counter = 0;
+    doc2 = doc;
+    doc.clear();
+    doc.garbageCollect();
+  }
 }
-
-// put your main code here, to run repeatedly:
-// }
