@@ -1,0 +1,6 @@
+arduino-libraries/WiFi@^1.2.7
+SPI
+esphome/AsyncTCP-esphome@^1.2.2
+adafruit/Adafruit ADS1X15@^2.4.0
+bblanchon/ArduinoJson@^6.19.4
+ottowinter/ESPAsyncWebServer-esphome@^2.1.0
